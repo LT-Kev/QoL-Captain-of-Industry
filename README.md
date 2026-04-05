@@ -1,16 +1,20 @@
 # QoL Captain of Industry
 
-`QoL Captain of Industry` is a Captain of Industry `Update 4` mod that bundles practical sandbox and quality-of-life tools into one package.
+`QoL Captain of Industry` is a `Captain of Industry` `Update 4` mod with sandbox tools, quality-of-life features, resource cheats, storage controls, terrain tools, and vehicle cap increases.
 
 GitHub: <https://github.com/LT-Kev/QoL-Captain-of-Industry>
+
+## Captain of Industry QoL Mod for Update 4
+
+This `Captain of Industry` mod is built for `Update 4` and focuses on practical QoL tools for sandbox play. It adds an in-game `F8` panel for game speed, vehicle limits, storage behavior, terrain actions, weather control, research helpers, and resource cheats.
 
 ## Features
 
 - `F8` QoL window with tabs for general tools, vehicles, terrain, storage and weather
 - Extra game speed controls beyond vanilla `x3`, including `x5`, `x10` and `x15`
 - Vehicle cap increase tools
-- Storage helpers, including global storage modes and a per-storage inspector button
-- Terrain helpers for instant mining, instant dumping, terrain surface conversion, trees and reserve refills
+- Storage helpers, including global storage modes, selected-storage controls, and a per-storage inspector button
+- Terrain helpers for instant mining, instant dumping, terrain surface conversion, trees, reserve refills, and selected mine tower scope
 - Research, instant build, unity, workers, power, computing, weather and source/sink helpers
 
 ## Download
