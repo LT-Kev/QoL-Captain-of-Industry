@@ -42,6 +42,7 @@ public sealed class QoLCaptainOfIndustryMod : IMod
     public void Initialize(DependencyResolver resolver, bool gameWasLoaded)
     {
         var commands = resolver.Resolve<QoLCaptainOfIndustryCommands>();
+        TryWireInspectorsManager(resolver, commands);
         TryInstallStorageEditorButtons(resolver);
 
         if (JsonConfig.GetBool("auto_enable_source_sinks", true))
@@ -70,6 +71,19 @@ public sealed class QoLCaptainOfIndustryMod : IMod
         catch (Exception ex)
         {
             Log.Warning($"QoLCaptainOfIndustry: storage inspector button unavailable in this API setup: {ex.Message}");
+        }
+    }
+
+    private static void TryWireInspectorsManager(DependencyResolver resolver, QoLCaptainOfIndustryCommands commands)
+    {
+        try
+        {
+            commands.SetInspectorsManager(resolver.Resolve<Mafi.Unity.Ui.InspectorsManager>());
+            Log.Info("QoLCaptainOfIndustry: inspectors manager connected");
+        }
+        catch (Exception ex)
+        {
+            Log.Warning($"QoLCaptainOfIndustry: inspectors manager unavailable in this API setup: {ex.Message}");
         }
     }
 

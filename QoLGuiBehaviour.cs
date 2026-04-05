@@ -207,6 +207,21 @@ public sealed class QoLGuiBehaviour : MonoBehaviour
 
     private void DrawTerrainTab()
     {
+        BeginCard("Selected Mine Tower", "Select a Mine Tower in the normal game UI to run tower-scoped terrain actions only for that tower.");
+        GUILayout.BeginHorizontal();
+        DrawStatChip("Selected Tower", m_commands.GetSelectedMineTowerText());
+        GUILayout.EndHorizontal();
+        GUILayout.Space(8f);
+        GUILayout.Label(m_commands.GetSelectedMineTowerScopeText(), m_subtitleStyle);
+        GUILayout.Space(10f);
+        DrawButtonGrid(
+            ("Instant Mine Selected", () => RunAction(() => m_commands.coiQolInstantMineSelected())),
+            ("Instant Dump Selected", () => RunTerrainProductAction(() => m_commands.coiQolInstantDumpSelected(m_selectedTerrainProduct))),
+            ("Change Terrain Selected", () => RunTerrainProductAction(() => m_commands.coiQolChangeTerrainSelected(m_selectedTerrainProduct))),
+            ("Add Trees Selected", () => RunAction(() => m_commands.coiQolAddTreesSelected()))
+        );
+        EndCard();
+
         BeginCard("Terrain Material", "Pick a dumpable loose material for terrain cheats like instant dump and surface conversion.");
         GUILayout.Label("Terrain Product Search", m_subtitleStyle);
         m_terrainProductFilter = GUILayout.TextField(m_terrainProductFilter ?? string.Empty);
@@ -215,7 +230,7 @@ public sealed class QoLGuiBehaviour : MonoBehaviour
         GUILayout.Label($"Selected Terrain Product: {m_selectedTerrainProduct}", m_subtitleStyle);
         EndCard();
 
-        BeginCard("Terrain Actions", "Fast terrain operations for active designations in the current save.");
+        BeginCard("Terrain Actions", "Fast terrain operations for all active designations in the current save.");
         DrawButtonGrid(
             ("Instant Mine", () => RunAction(() => m_commands.coiQolInstantMine())),
             ("Instant Dump", () => RunTerrainProductAction(() => m_commands.coiQolInstantDump(m_selectedTerrainProduct))),

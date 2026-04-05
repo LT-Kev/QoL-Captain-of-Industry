@@ -4,6 +4,7 @@ using System.Reflection;
 using Mafi;
 using Mafi.Core;
 using Mafi.Core.Buildings.Storages;
+using Mafi.Core.Buildings.Mine;
 using Mafi.Core.Console;
 using Mafi.Core.Environment;
 using Mafi.Core.Factory.ComputingPower;
@@ -23,6 +24,7 @@ using Mafi.Core.Utils;
 using Mafi.Core.World;
 using Mafi.Core.Entities;
 using Mafi.Core.Vehicles;
+using Mafi.Unity.Ui;
 
 namespace QoLCaptainOfIndustry;
 
@@ -54,6 +56,7 @@ public sealed class QoLCaptainOfIndustryCommands
     private readonly ITreePlantingManager m_treePlantingManager;
     private readonly VirtualResourceManager m_virtualResourceManager;
     private readonly ICalendar m_calendar;
+    private InspectorsManager m_inspectorsManager;
 
     public QoLCaptainOfIndustryCommands(
         ProtosDb protosDb,
@@ -183,6 +186,30 @@ public sealed class QoLCaptainOfIndustryCommands
             : $"x{Math.Max(1, m_simLoopEvents.SimSpeedMult)}";
     }
 
+    public void SetInspectorsManager(InspectorsManager inspectorsManager)
+    {
+        m_inspectorsManager = inspectorsManager;
+    }
+
+    public string GetSelectedMineTowerText()
+    {
+        return TryGetSelectedMineTower(out var tower, out _)
+            ? $"Mine Tower {tower.Id}"
+            : "None selected";
+    }
+
+    public string GetSelectedMineTowerScopeText()
+    {
+        if (!TryGetSelectedMineTower(out var tower, out _))
+        {
+            return "Select a Mine Tower in the normal game UI to scope terrain actions.";
+        }
+
+        var miningCount = tower.ManagedDesignations.Count().ToString();
+        var dumpingCount = tower.ManagedDumpingDesignations.Count().ToString();
+        return $"Mining areas: {miningCount} | Dumping areas: {dumpingCount}";
+    }
+
     public string[] FindProducts(string filter, int max = 24)
     {
         var normalizedFilter = Normalize(filter);
@@ -255,9 +282,13 @@ public sealed class QoLCaptainOfIndustryCommands
             "coi_qol_fill_storages <productId>",
             "coi_qol_list_products [filter]",
             "coi_qol_instant_mine",
+            "coi_qol_instant_mine_selected",
             "coi_qol_instant_dump <productId>",
+            "coi_qol_instant_dump_selected <productId>",
             "coi_qol_change_terrain <productId>",
+            "coi_qol_change_terrain_selected <productId>",
             "coi_qol_add_trees",
+            "coi_qol_add_trees_selected",
             "coi_qol_remove_selected_trees",
             "coi_qol_refill_groundwater",
             "coi_qol_refill_groundcrude",
@@ -508,6 +539,31 @@ public sealed class QoLCaptainOfIndustryCommands
     }
 
     [ConsoleCommand(true, false, "", "")]
+    public GameCommandResult coiQolInstantMineSelected()
+    {
+        if (!TryGetSelectedMineTower(out var tower, out var error))
+        {
+            return Error(error);
+        }
+
+        var changed = 0;
+        foreach (var designation in tower.ManagedDesignations.Where(x => x.IsMiningNotFulfilled))
+        {
+            designation.ForEachTile((tile, _) =>
+            {
+                RemoveTreeAt(tile.TileCoord);
+                tile.SetHeight(designation.GetTargetHeightAt(tile.TileCoord));
+            });
+
+            changed++;
+        }
+
+        return changed > 0
+            ? Success($"Completed {changed} mining designations for {tower.Id}.")
+            : Error($"Selected tower {tower.Id} has no active mining designations.");
+    }
+
+    [ConsoleCommand(true, false, "", "")]
     public GameCommandResult coiQolInstantDump(string productId)
     {
         if (!TryFindLooseTerrainProduct(productId, out var product))
@@ -532,6 +588,38 @@ public sealed class QoLCaptainOfIndustryCommands
         return changed > 0
             ? Success($"Completed {changed} dumping designations with {product.Id}.")
             : Error("No active dumping designations were found.");
+    }
+
+    [ConsoleCommand(true, false, "", "")]
+    public GameCommandResult coiQolInstantDumpSelected(string productId)
+    {
+        if (!TryGetSelectedMineTower(out var tower, out var error))
+        {
+            return Error(error);
+        }
+
+        if (!TryFindLooseTerrainProduct(productId, out var product))
+        {
+            return Error("Unknown terrain product. Use a loose product that can be on terrain, such as dirt or gravel.");
+        }
+
+        var terrainMaterial = new LooseProductQuantity(product, Quantity.MaxValue).ToTerrainThickness();
+        var changed = 0;
+
+        foreach (var designation in tower.ManagedDumpingDesignations.Where(x => x.IsNotFulfilled))
+        {
+            designation.ForEachTile((tile, targetHeight) =>
+            {
+                RemoveTreeAt(tile.TileCoord);
+                m_terrainManager.DumpMaterialUpToHeight(tile.CoordAndIndex, terrainMaterial.AsSlim, targetHeight);
+            });
+
+            changed++;
+        }
+
+        return changed > 0
+            ? Success($"Completed {changed} dumping designations with {product.Id} for {tower.Id}.")
+            : Error($"Selected tower {tower.Id} has no active dumping designations.");
     }
 
     [ConsoleCommand(true, false, "", "")]
@@ -565,6 +653,41 @@ public sealed class QoLCaptainOfIndustryCommands
     }
 
     [ConsoleCommand(true, false, "", "")]
+    public GameCommandResult coiQolChangeTerrainSelected(string productId)
+    {
+        if (!TryGetSelectedMineTower(out var tower, out var error))
+        {
+            return Error(error);
+        }
+
+        if (!TryFindLooseTerrainProduct(productId, out var product))
+        {
+            return Error("Unknown terrain product. Use a loose product that can be on terrain, such as dirt or gravel.");
+        }
+
+        var terrainMaterial = new LooseProductQuantity(product, Quantity.MaxValue).ToTerrainThickness();
+        var changed = 0;
+
+        foreach (var designation in tower.ManagedDumpingDesignations)
+        {
+            designation.ForEachTile((TerrainTile tile, HeightTilesF _) =>
+            {
+                m_terrainManager.ConvertMaterialInFirstLayer(
+                    tile.CoordAndIndex,
+                    terrainMaterial.Material.SlimId,
+                    ThicknessTilesF.One,
+                    ThicknessTilesF.One);
+            });
+
+            changed++;
+        }
+
+        return changed > 0
+            ? Success($"Changed the top terrain layer for {changed} dumping designations on {tower.Id} to {product.Id}.")
+            : Error($"Selected tower {tower.Id} has no dumping designations.");
+    }
+
+    [ConsoleCommand(true, false, "", "")]
     public GameCommandResult coiQolAddTrees()
     {
         var treeProto = m_protosDb.All<TreeProto>()
@@ -591,6 +714,40 @@ public sealed class QoLCaptainOfIndustryCommands
         return planted > 0
             ? Success($"Queued {planted} trees on dumping designations.")
             : Error("No valid dumping tiles were found for tree placement.");
+    }
+
+    [ConsoleCommand(true, false, "", "")]
+    public GameCommandResult coiQolAddTreesSelected()
+    {
+        if (!TryGetSelectedMineTower(out var tower, out var error))
+        {
+            return Error(error);
+        }
+
+        var treeProto = m_protosDb.All<TreeProto>()
+            .FirstOrDefault(proto => proto.Id.ToString().IndexOf("fir", StringComparison.OrdinalIgnoreCase) >= 0)
+            ?? m_protosDb.All<TreeProto>().FirstOrDefault();
+
+        if (treeProto == null)
+        {
+            return Error("No tree prototype was found in the current game data.");
+        }
+
+        var planted = 0;
+        foreach (var designation in tower.ManagedDumpingDesignations)
+        {
+            designation.ForEachTile((TerrainTile tile, HeightTilesF _) =>
+            {
+                if (m_treePlantingManager.TryAddManualTree(treeProto, tile.TileCoord, m_simLoopEvents.CurrentStep))
+                {
+                    planted++;
+                }
+            });
+        }
+
+        return planted > 0
+            ? Success($"Queued {planted} trees on dumping designations for {tower.Id}.")
+            : Error($"Selected tower {tower.Id} has no valid dumping tiles for tree placement.");
     }
 
     [ConsoleCommand(true, false, "", "")]
@@ -718,6 +875,34 @@ public sealed class QoLCaptainOfIndustryCommands
         }
 
         return product.CanBeLoadedOnTruck && product.CanBeOnTerrain;
+    }
+
+    private bool TryGetSelectedMineTower(out MineTower tower, out string error)
+    {
+        tower = null;
+
+        if (m_inspectorsManager == null)
+        {
+            error = "The current UI selection manager is not available in this game session.";
+            return false;
+        }
+
+        var entity = m_inspectorsManager.GetFirstActiveEntityOrNull();
+        if (entity == null)
+        {
+            error = "No entity is selected. Select a Mine Tower first.";
+            return false;
+        }
+
+        tower = entity as MineTower;
+        if (tower == null)
+        {
+            error = $"Selected entity is '{entity.GetType().Name}'. Select a Mine Tower first.";
+            return false;
+        }
+
+        error = null;
+        return true;
     }
 
     private GameCommandResult RefillVirtualResource(string requiredIdPart, string requiredSecondaryIdPart, string displayName)
