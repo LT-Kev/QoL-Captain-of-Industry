@@ -1,0 +1,6 @@
+{
+  "auto_enable_source_sinks": {
+    "default": true,
+    "description": "Automatically enables the hidden source/sink cheat buildings when the mod loads."
+  }
+}

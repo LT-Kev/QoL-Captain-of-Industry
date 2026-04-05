@@ -1,0 +1,14 @@
+bin/
+obj/
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+*.pdb
+*.zip
+!downloads/*.zip
+*.cache
+*.log
+Thumbs.db
+Desktop.ini
