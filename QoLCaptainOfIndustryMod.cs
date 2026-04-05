@@ -42,9 +42,7 @@ public sealed class QoLCaptainOfIndustryMod : IMod
     public void Initialize(DependencyResolver resolver, bool gameWasLoaded)
     {
         var commands = resolver.Resolve<QoLCaptainOfIndustryCommands>();
-        QoLStorageEditorButtons.Install(
-            resolver.Resolve<Mafi.Unity.UiToolkit.Library.ObjectEditor.ObjEditorsRegistry>(),
-            resolver.Resolve<Mafi.Core.Input.IInputScheduler>());
+        TryInstallStorageEditorButtons(resolver);
 
         if (JsonConfig.GetBool("auto_enable_source_sinks", true))
         {
@@ -58,6 +56,21 @@ public sealed class QoLCaptainOfIndustryMod : IMod
 
     public void MigrateJsonConfig(VersionSlim savedVersion, Dict<string, object> savedValues)
     {
+    }
+
+    private static void TryInstallStorageEditorButtons(DependencyResolver resolver)
+    {
+        try
+        {
+            QoLStorageEditorButtons.Install(
+                resolver.Resolve<Mafi.Unity.UiToolkit.Library.ObjectEditor.ObjEditorsRegistry>(),
+                resolver.Resolve<Mafi.Core.Input.IInputScheduler>());
+            Log.Info("QoLCaptainOfIndustry: storage inspector button installed");
+        }
+        catch (Exception ex)
+        {
+            Log.Warning($"QoLCaptainOfIndustry: storage inspector button unavailable in this API setup: {ex.Message}");
+        }
     }
 
     public void Dispose()
