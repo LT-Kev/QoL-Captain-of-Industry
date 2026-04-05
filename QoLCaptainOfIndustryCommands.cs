@@ -210,6 +210,23 @@ public sealed class QoLCaptainOfIndustryCommands
         return $"Mining areas: {miningCount} | Dumping areas: {dumpingCount}";
     }
 
+    public string GetSelectedStorageText()
+    {
+        return TryGetSelectedStorage(out var storage, out _)
+            ? $"Storage {storage.Id}"
+            : "None selected";
+    }
+
+    public string GetSelectedStorageScopeText()
+    {
+        if (!TryGetSelectedStorage(out var storage, out _))
+        {
+            return "Select a storage building in the normal game UI to scope storage actions.";
+        }
+
+        return $"Current mode: {storage.CheatMode}";
+    }
+
     public string[] FindProducts(string filter, int max = 24)
     {
         var normalizedFilter = Normalize(filter);
@@ -279,7 +296,9 @@ public sealed class QoLCaptainOfIndustryCommands
             "coi_qol_set_free_power_mw [mw]",
             "coi_qol_free_computing [true|false]",
             "coi_qol_set_storage_mode <off|full|empty>",
+            "coi_qol_set_selected_storage_mode <off|full|empty>",
             "coi_qol_fill_storages <productId>",
+            "coi_qol_fill_selected_storage <productId>",
             "coi_qol_list_products [filter]",
             "coi_qol_instant_mine",
             "coi_qol_instant_mine_selected",
@@ -465,6 +484,23 @@ public sealed class QoLCaptainOfIndustryCommands
     }
 
     [ConsoleCommand(true, false, "", "")]
+    public GameCommandResult coiQolSetSelectedStorageMode(string mode)
+    {
+        if (!TryGetSelectedStorage(out var storage, out var selectionError))
+        {
+            return Error(selectionError);
+        }
+
+        if (!TryParseStorageMode(mode, out var parsedMode))
+        {
+            return Error("Unknown mode. Use off, full or empty.");
+        }
+
+        m_scheduler.ScheduleInputCmd(new StorageSetCheatModeCmd(storage, parsedMode));
+        return Success($"Applied storage mode '{mode}' to {storage.Id}.");
+    }
+
+    [ConsoleCommand(true, false, "", "")]
     public GameCommandResult coiQolFillStorages(string productId)
     {
         if (string.IsNullOrWhiteSpace(productId))
@@ -496,6 +532,33 @@ public sealed class QoLCaptainOfIndustryCommands
         }
 
         return Success($"Filled {changed} storages with {product.Id}.");
+    }
+
+    [ConsoleCommand(true, false, "", "")]
+    public GameCommandResult coiQolFillSelectedStorage(string productId)
+    {
+        if (!TryGetSelectedStorage(out var storage, out var selectionError))
+        {
+            return Error(selectionError);
+        }
+
+        if (string.IsNullOrWhiteSpace(productId))
+        {
+            return Error("Please provide a product id. Use coi_qol_list_products to discover ids.");
+        }
+
+        if (!m_protosDb.TryFindProtoIgnoreCase<ProductProto>(productId.Trim(), out var product))
+        {
+            return Error($"Unknown product '{productId}'. Use coi_qol_list_products to find a valid id.");
+        }
+
+        if (!storage.IsProductSupported(product))
+        {
+            return Error($"Selected storage {storage.Id} does not accept product '{product.Id}'.");
+        }
+
+        m_scheduler.ScheduleInputCmd(new StorageCheatProductCmd(storage, product));
+        return Success($"Filled {storage.Id} with {product.Id}.");
     }
 
     [ConsoleCommand(true, false, "", "")]
@@ -875,6 +938,34 @@ public sealed class QoLCaptainOfIndustryCommands
         }
 
         return product.CanBeLoadedOnTruck && product.CanBeOnTerrain;
+    }
+
+    private bool TryGetSelectedStorage(out Storage storage, out string error)
+    {
+        storage = null;
+
+        if (m_inspectorsManager == null)
+        {
+            error = "The current UI selection manager is not available in this game session.";
+            return false;
+        }
+
+        var entity = m_inspectorsManager.GetFirstActiveEntityOrNull();
+        if (entity == null)
+        {
+            error = "No entity is selected. Select a storage building first.";
+            return false;
+        }
+
+        storage = entity as Storage;
+        if (storage == null)
+        {
+            error = $"Selected entity is '{entity.GetType().Name}'. Select a storage building first.";
+            return false;
+        }
+
+        error = null;
+        return true;
     }
 
     private bool TryGetSelectedMineTower(out MineTower tower, out string error)

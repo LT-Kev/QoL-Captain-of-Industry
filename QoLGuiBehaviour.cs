@@ -176,6 +176,31 @@ public sealed class QoLGuiBehaviour : MonoBehaviour
 
     private void DrawStorageTab()
     {
+        BeginCard("Selected Storage", "Select a storage building in the normal game UI to change only that specific storage.");
+        GUILayout.BeginHorizontal();
+        DrawStatChip("Selected Storage", m_commands.GetSelectedStorageText());
+        GUILayout.EndHorizontal();
+        GUILayout.Space(8f);
+        GUILayout.Label(m_commands.GetSelectedStorageScopeText(), m_subtitleStyle);
+        GUILayout.Space(10f);
+        DrawButtonGrid(
+            ("Selected Off", () => RunAction(() => m_commands.coiQolSetSelectedStorageMode("off"))),
+            ("Selected Keep Full", () => RunAction(() => m_commands.coiQolSetSelectedStorageMode("full"))),
+            ("Selected Keep Empty", () => RunAction(() => m_commands.coiQolSetSelectedStorageMode("empty")))
+        );
+        GUILayout.Space(8f);
+        DrawActionButton("Fill Selected Storage", () =>
+        {
+            if (string.IsNullOrWhiteSpace(m_selectedProduct))
+            {
+                m_statusMessage = "Please select a product first.";
+                return;
+            }
+
+            RunAction(() => m_commands.coiQolFillSelectedStorage(m_selectedProduct));
+        }, true);
+        EndCard();
+
         BeginCard("Storage Modes", "Apply one mode to every compatible storage on the island.");
         DrawButtonGrid(
             ("Mode Off", () => RunAction(() => m_commands.coiQolSetStorageMode("off"))),
