@@ -9,28 +9,43 @@ public static class QoLStorageEditorButtons
 {
     public static void Install(ObjEditorsRegistry registry, IInputScheduler scheduler)
     {
+        RegisterModeAction(
+            registry,
+            scheduler,
+            Storage.StorageCheatMode.None,
+            "QoL Off",
+            "Turns the selected storage cheat mode off.");
+
+        RegisterModeAction(
+            registry,
+            scheduler,
+            Storage.StorageCheatMode.KeepFull,
+            "QoL Keep Full",
+            "Keeps the selected storage full.");
+
+        RegisterModeAction(
+            registry,
+            scheduler,
+            Storage.StorageCheatMode.KeepEmpty,
+            "QoL Keep Empty",
+            "Keeps the selected storage empty.");
+    }
+
+    private static void RegisterModeAction(
+        ObjEditorsRegistry registry,
+        IInputScheduler scheduler,
+        Storage.StorageCheatMode targetMode,
+        string label,
+        string description)
+    {
         registry.RegisterActionPerType<Storage>(
             storage =>
             {
-                var nextMode = GetNextMode(storage.CheatMode);
-                scheduler.ScheduleInputCmd(new StorageSetCheatModeCmd(storage, nextMode));
-                Log.Info($"QoLCaptainOfIndustry: queued storage mode change for {storage.Id} to {nextMode}");
+                scheduler.ScheduleInputCmd(new StorageSetCheatModeCmd(storage, targetMode));
+                Log.Info($"QoLCaptainOfIndustry: queued storage mode change for {storage.Id} to {targetMode}");
                 return storage;
             },
-            "Storage Mode",
-            "Cycles storage mode for the selected storage: Off -> Keep Full -> Keep Empty.");
-    }
-
-    private static Storage.StorageCheatMode GetNextMode(Storage.StorageCheatMode currentMode)
-    {
-        switch (currentMode)
-        {
-            case Storage.StorageCheatMode.None:
-                return Storage.StorageCheatMode.KeepFull;
-            case Storage.StorageCheatMode.KeepFull:
-                return Storage.StorageCheatMode.KeepEmpty;
-            default:
-                return Storage.StorageCheatMode.None;
-        }
+            label,
+            description);
     }
 }

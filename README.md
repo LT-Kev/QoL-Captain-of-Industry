@@ -22,7 +22,7 @@ This `Captain of Industry` mod is built for `Update 4` and focuses on practical 
 - Direct DLL download:
   <https://raw.githubusercontent.com/LT-Kev/QoL-Captain-of-Industry/main/downloads/QoLCaptainOfIndustry.dll>
 - Direct ZIP download:
-  <https://github.com/LT-Kev/QoL-Captain-of-Industry/raw/main/downloads/QoLCaptainOfIndustry_0.1.0.zip>
+  <https://github.com/LT-Kev/QoL-Captain-of-Industry/raw/main/downloads/QoLCaptainOfIndustry_0.1.1.zip>
 - `ZIP` is recommended for a fresh install because it contains the full mod folder structure.
 - `DLL` is useful when you only want to update the compiled mod file in an existing install.
 

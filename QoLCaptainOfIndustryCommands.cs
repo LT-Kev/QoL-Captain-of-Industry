@@ -30,6 +30,20 @@ namespace QoLCaptainOfIndustry;
 
 public sealed class QoLCaptainOfIndustryCommands
 {
+    public readonly struct StorageModeOverlayInfo
+    {
+        public StorageModeOverlayInfo(int entityId, Tile3i centerTile, Storage.StorageCheatMode mode)
+        {
+            EntityId = entityId;
+            CenterTile = centerTile;
+            Mode = mode;
+        }
+
+        public int EntityId { get; }
+        public Tile3i CenterTile { get; }
+        public Storage.StorageCheatMode Mode { get; }
+    }
+
     private static readonly FieldInfo s_resultField = typeof(GameCommandResult).GetField("Result", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
     private static readonly FieldInfo s_errorField = typeof(GameCommandResult).GetField("ErrorMessage", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
 
@@ -57,6 +71,10 @@ public sealed class QoLCaptainOfIndustryCommands
     private readonly VirtualResourceManager m_virtualResourceManager;
     private readonly ICalendar m_calendar;
     private InspectorsManager m_inspectorsManager;
+    private Storage m_lastSelectedStorage;
+    private MineTower m_lastSelectedMineTower;
+    private Storage m_pinnedStorage;
+    private MineTower m_pinnedMineTower;
 
     public QoLCaptainOfIndustryCommands(
         ProtosDb protosDb,
@@ -193,14 +211,16 @@ public sealed class QoLCaptainOfIndustryCommands
 
     public string GetSelectedMineTowerText()
     {
-        return TryGetSelectedMineTower(out var tower, out _)
-            ? $"Mine Tower {tower.Id}"
+        return TryGetSelectedMineTower(out var tower, out var usedCachedSelection, out _)
+            ? IsMineTowerPinned() && ReferenceEquals(tower, m_pinnedMineTower)
+                ? $"Mine Tower {tower.Id} (pinned)"
+                : usedCachedSelection ? $"Mine Tower {tower.Id} (cached)" : $"Mine Tower {tower.Id}"
             : "None selected";
     }
 
     public string GetSelectedMineTowerScopeText()
     {
-        if (!TryGetSelectedMineTower(out var tower, out _))
+        if (!TryGetSelectedMineTower(out var tower, out _, out _))
         {
             return "Select a Mine Tower in the normal game UI to scope terrain actions.";
         }
@@ -212,19 +232,109 @@ public sealed class QoLCaptainOfIndustryCommands
 
     public string GetSelectedStorageText()
     {
-        return TryGetSelectedStorage(out var storage, out _)
-            ? $"Storage {storage.Id}"
+        return TryGetSelectedStorage(out var storage, out var usedCachedSelection, out _)
+            ? IsStoragePinned() && ReferenceEquals(storage, m_pinnedStorage)
+                ? $"Storage {storage.Id} (pinned)"
+                : usedCachedSelection ? $"Storage {storage.Id} (cached)" : $"Storage {storage.Id}"
             : "None selected";
     }
 
     public string GetSelectedStorageScopeText()
     {
-        if (!TryGetSelectedStorage(out var storage, out _))
+        if (!TryGetSelectedStorage(out var storage, out _, out _))
         {
             return "Select a storage building in the normal game UI to scope storage actions.";
         }
 
         return $"Current mode: {storage.CheatMode}";
+    }
+
+    public bool HasSelectedStorage()
+    {
+        return TryGetSelectedStorage(out _, out _, out _);
+    }
+
+    public bool HasSelectedMineTower()
+    {
+        return TryGetSelectedMineTower(out _, out _, out _);
+    }
+
+    public string GetSelectedStorageHudText()
+    {
+        if (!TryGetSelectedStorage(out var storage, out _, out _))
+        {
+            return "Storage QoL";
+        }
+
+        switch (storage.CheatMode)
+        {
+            case Storage.StorageCheatMode.KeepFull:
+                return "Storage: FULL";
+            case Storage.StorageCheatMode.KeepEmpty:
+                return "Storage: EMPTY";
+            default:
+                return "Storage: OFF";
+        }
+    }
+
+    public string GetSelectedMineTowerHudText()
+    {
+        if (!TryGetSelectedMineTower(out var tower, out _, out _))
+        {
+            return "Tower QoL";
+        }
+
+        return $"Tower {tower.Id}";
+    }
+
+    public bool IsStoragePinned()
+    {
+        return m_pinnedStorage != null && !m_pinnedStorage.IsDestroyed;
+    }
+
+    public bool IsMineTowerPinned()
+    {
+        return m_pinnedMineTower != null && !m_pinnedMineTower.IsDestroyed;
+    }
+
+    public string GetSelectedEntityText()
+    {
+        if (TryGetSelectedEntity(out var entity, out var source))
+        {
+            return $"{entity.GetType().Name} {entity.Id} [{source}]";
+        }
+
+        return "No entity selected";
+    }
+
+    public string GetSelectedEntityScopeText()
+    {
+        if (!TryGetSelectedEntity(out var entity, out _))
+        {
+            return "Select something in the normal game UI to see context-sensitive quick actions.";
+        }
+
+        if (entity is Storage storage)
+        {
+            return $"Storage mode: {storage.CheatMode}";
+        }
+
+        if (entity is MineTower tower)
+        {
+            return $"Mining areas: {tower.ManagedDesignations.Count()} | Dumping areas: {tower.ManagedDumpingDesignations.Count()}";
+        }
+
+        return "Quick actions currently focus on storages and mine towers first.";
+    }
+
+    public StorageModeOverlayInfo[] GetStorageModeOverlayInfos()
+    {
+        return m_entitiesManager.GetAllEntitiesOfType<Storage>()
+            .Where(storage => storage != null
+                && !storage.IsDestroyed
+                && storage.CheatMode != Storage.StorageCheatMode.None)
+            .Select(storage => new StorageModeOverlayInfo(storage.Id.Value, storage.CenterTile, storage.CheatMode))
+            .ToArray();
     }
 
     public string[] FindProducts(string filter, int max = 24)
@@ -297,6 +407,9 @@ public sealed class QoLCaptainOfIndustryCommands
             "coi_qol_free_computing [true|false]",
             "coi_qol_set_storage_mode <off|full|empty>",
             "coi_qol_set_selected_storage_mode <off|full|empty>",
+            "coi_qol_pin_selected_storage [true|false]",
+            "coi_qol_pin_selected_mine_tower [true|false]",
+            "coi_qol_clear_selection_pins",
             "coi_qol_fill_storages <productId>",
             "coi_qol_fill_selected_storage <productId>",
             "coi_qol_list_products [filter]",
@@ -486,7 +599,7 @@ public sealed class QoLCaptainOfIndustryCommands
     [ConsoleCommand(true, false, "", "")]
     public GameCommandResult coiQolSetSelectedStorageMode(string mode)
     {
-        if (!TryGetSelectedStorage(out var storage, out var selectionError))
+        if (!TryGetSelectedStorage(out var storage, out _, out var selectionError))
         {
             return Error(selectionError);
         }
@@ -498,6 +611,50 @@ public sealed class QoLCaptainOfIndustryCommands
 
         m_scheduler.ScheduleInputCmd(new StorageSetCheatModeCmd(storage, parsedMode));
         return Success($"Applied storage mode '{mode}' to {storage.Id}.");
+    }
+
+    [ConsoleCommand(true, false, "", "")]
+    public GameCommandResult coiQolPinSelectedStorage(bool pinned = true)
+    {
+        if (!pinned)
+        {
+            m_pinnedStorage = null;
+            return Success("Selected storage pin cleared.");
+        }
+
+        if (!TryGetSelectedStorage(out var storage, out _, out var selectionError))
+        {
+            return Error(selectionError);
+        }
+
+        m_pinnedStorage = storage;
+        return Success($"Pinned storage {storage.Id}.");
+    }
+
+    [ConsoleCommand(true, false, "", "")]
+    public GameCommandResult coiQolPinSelectedMineTower(bool pinned = true)
+    {
+        if (!pinned)
+        {
+            m_pinnedMineTower = null;
+            return Success("Selected mine tower pin cleared.");
+        }
+
+        if (!TryGetSelectedMineTower(out var tower, out _, out var selectionError))
+        {
+            return Error(selectionError);
+        }
+
+        m_pinnedMineTower = tower;
+        return Success($"Pinned mine tower {tower.Id}.");
+    }
+
+    [ConsoleCommand(true, false, "", "")]
+    public GameCommandResult coiQolClearSelectionPins()
+    {
+        m_pinnedStorage = null;
+        m_pinnedMineTower = null;
+        return Success("Cleared pinned storage and mine tower selections.");
     }
 
     [ConsoleCommand(true, false, "", "")]
@@ -537,7 +694,7 @@ public sealed class QoLCaptainOfIndustryCommands
     [ConsoleCommand(true, false, "", "")]
     public GameCommandResult coiQolFillSelectedStorage(string productId)
     {
-        if (!TryGetSelectedStorage(out var storage, out var selectionError))
+        if (!TryGetSelectedStorage(out var storage, out _, out var selectionError))
         {
             return Error(selectionError);
         }
@@ -604,7 +761,7 @@ public sealed class QoLCaptainOfIndustryCommands
     [ConsoleCommand(true, false, "", "")]
     public GameCommandResult coiQolInstantMineSelected()
     {
-        if (!TryGetSelectedMineTower(out var tower, out var error))
+        if (!TryGetSelectedMineTower(out var tower, out _, out var error))
         {
             return Error(error);
         }
@@ -656,7 +813,7 @@ public sealed class QoLCaptainOfIndustryCommands
     [ConsoleCommand(true, false, "", "")]
     public GameCommandResult coiQolInstantDumpSelected(string productId)
     {
-        if (!TryGetSelectedMineTower(out var tower, out var error))
+        if (!TryGetSelectedMineTower(out var tower, out _, out var error))
         {
             return Error(error);
         }
@@ -718,7 +875,7 @@ public sealed class QoLCaptainOfIndustryCommands
     [ConsoleCommand(true, false, "", "")]
     public GameCommandResult coiQolChangeTerrainSelected(string productId)
     {
-        if (!TryGetSelectedMineTower(out var tower, out var error))
+        if (!TryGetSelectedMineTower(out var tower, out _, out var error))
         {
             return Error(error);
         }
@@ -782,7 +939,7 @@ public sealed class QoLCaptainOfIndustryCommands
     [ConsoleCommand(true, false, "", "")]
     public GameCommandResult coiQolAddTreesSelected()
     {
-        if (!TryGetSelectedMineTower(out var tower, out var error))
+        if (!TryGetSelectedMineTower(out var tower, out _, out var error))
         {
             return Error(error);
         }
@@ -940,9 +1097,19 @@ public sealed class QoLCaptainOfIndustryCommands
         return product.CanBeLoadedOnTruck && product.CanBeOnTerrain;
     }
 
-    private bool TryGetSelectedStorage(out Storage storage, out string error)
+    private bool TryGetSelectedStorage(out Storage storage, out bool usedCachedSelection, out string error)
     {
         storage = null;
+        usedCachedSelection = false;
+
+        RefreshSelectedEntityCaches();
+
+        if (m_pinnedStorage != null && !m_pinnedStorage.IsDestroyed)
+        {
+            storage = m_pinnedStorage;
+            error = null;
+            return true;
+        }
 
         if (m_inspectorsManager == null)
         {
@@ -951,26 +1118,44 @@ public sealed class QoLCaptainOfIndustryCommands
         }
 
         var entity = m_inspectorsManager.GetFirstActiveEntityOrNull();
-        if (entity == null)
+        if (entity is Storage liveStorage && !liveStorage.IsDestroyed)
         {
-            error = "No entity is selected. Select a storage building first.";
-            return false;
+            storage = liveStorage;
+            error = null;
+            return true;
         }
 
-        storage = entity as Storage;
-        if (storage == null)
+        if (entity != null)
         {
             error = $"Selected entity is '{entity.GetType().Name}'. Select a storage building first.";
             return false;
         }
 
-        error = null;
-        return true;
+        if (m_lastSelectedStorage != null && !m_lastSelectedStorage.IsDestroyed)
+        {
+            storage = m_lastSelectedStorage;
+            usedCachedSelection = true;
+            error = null;
+            return true;
+        }
+
+        error = "No entity is selected. Select a storage building first.";
+        return false;
     }
 
-    private bool TryGetSelectedMineTower(out MineTower tower, out string error)
+    private bool TryGetSelectedMineTower(out MineTower tower, out bool usedCachedSelection, out string error)
     {
         tower = null;
+        usedCachedSelection = false;
+
+        RefreshSelectedEntityCaches();
+
+        if (m_pinnedMineTower != null && !m_pinnedMineTower.IsDestroyed)
+        {
+            tower = m_pinnedMineTower;
+            error = null;
+            return true;
+        }
 
         if (m_inspectorsManager == null)
         {
@@ -979,21 +1164,115 @@ public sealed class QoLCaptainOfIndustryCommands
         }
 
         var entity = m_inspectorsManager.GetFirstActiveEntityOrNull();
-        if (entity == null)
+        if (entity is MineTower liveTower && !liveTower.IsDestroyed)
         {
-            error = "No entity is selected. Select a Mine Tower first.";
-            return false;
+            tower = liveTower;
+            error = null;
+            return true;
         }
 
-        tower = entity as MineTower;
-        if (tower == null)
+        if (entity != null)
         {
             error = $"Selected entity is '{entity.GetType().Name}'. Select a Mine Tower first.";
             return false;
         }
 
-        error = null;
-        return true;
+        if (m_lastSelectedMineTower != null && !m_lastSelectedMineTower.IsDestroyed)
+        {
+            tower = m_lastSelectedMineTower;
+            usedCachedSelection = true;
+            error = null;
+            return true;
+        }
+
+        error = "No entity is selected. Select a Mine Tower first.";
+        return false;
+    }
+
+    private void RefreshSelectedEntityCaches()
+    {
+        if (m_inspectorsManager == null)
+        {
+            return;
+        }
+
+        var entity = m_inspectorsManager.GetFirstActiveEntityOrNull();
+        if (entity is Storage selectedStorage && !selectedStorage.IsDestroyed)
+        {
+            m_lastSelectedStorage = selectedStorage;
+        }
+        else if (entity != null)
+        {
+            m_lastSelectedStorage = null;
+        }
+
+        if (entity is MineTower selectedMineTower && !selectedMineTower.IsDestroyed)
+        {
+            m_lastSelectedMineTower = selectedMineTower;
+        }
+        else if (entity != null)
+        {
+            m_lastSelectedMineTower = null;
+        }
+    }
+
+    private bool TryGetSelectedMineTower(out MineTower tower, out string error)
+    {
+        return TryGetSelectedMineTower(out tower, out _, out error);
+    }
+
+    private bool TryGetSelectedEntity(out IEntity entity, out string source)
+    {
+        entity = null;
+        source = null;
+
+        RefreshSelectedEntityCaches();
+
+        if (m_inspectorsManager != null)
+        {
+            var liveEntity = m_inspectorsManager.GetFirstActiveEntityOrNull();
+            if (liveEntity != null)
+            {
+                entity = liveEntity;
+                source = "live";
+                return true;
+            }
+        }
+
+        if (m_pinnedStorage != null && !m_pinnedStorage.IsDestroyed)
+        {
+            entity = m_pinnedStorage;
+            source = "pinned";
+            return true;
+        }
+
+        if (m_pinnedMineTower != null && !m_pinnedMineTower.IsDestroyed)
+        {
+            entity = m_pinnedMineTower;
+            source = "pinned";
+            return true;
+        }
+
+        if (m_lastSelectedStorage != null && !m_lastSelectedStorage.IsDestroyed)
+        {
+            entity = m_lastSelectedStorage;
+            source = "cached";
+            return true;
+        }
+
+        if (m_lastSelectedMineTower != null && !m_lastSelectedMineTower.IsDestroyed)
+        {
+            entity = m_lastSelectedMineTower;
+            source = "cached";
+            return true;
+        }
+
+        return false;
+    }
+
+    private bool TryGetSelectedStorage(out Storage storage, out string error)
+    {
+        return TryGetSelectedStorage(out storage, out _, out error);
     }
 
     private GameCommandResult RefillVirtualResource(string requiredIdPart, string requiredSecondaryIdPart, string displayName)

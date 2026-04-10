@@ -4,6 +4,12 @@ All notable changes to `QoL Captain of Industry` will be documented in this file
 
 The format is inspired by `Keep a Changelog`.
 
+## [0.1.1] - 2026-04-06
+
+### Fixed
+
+- Preserved selected storage and selected mine tower scope while using the `F8` GUI, so selected actions continue to work after clicking inside the mod window
+
 ## [0.1.0] - 2026-04-05
 
 ### Added

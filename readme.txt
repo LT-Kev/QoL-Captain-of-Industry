@@ -1,4 +1,4 @@
-QoL Captain of Industry for Captain of Industry Update 4
+QoL Captain of Industry 0.1.1 for Captain of Industry Update 4
 
 This mod adds a rebuilt in-game GUI and matching console commands for practical sandbox and quality-of-life controls.
 
